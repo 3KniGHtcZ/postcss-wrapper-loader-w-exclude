@@ -1,54 +1,59 @@
-const _ = require('lodash/fp');
-const postCss = require('postcss');
+const _ = require('lodash/fp')
+const postCss = require('postcss')
 
-const keyFramesParent = ['keyframes', '-webkit-keyframes', '-moz-keyframes'];
+const postCssWrapperPlugin = postCss.plugin(
+  'postcss-wrapper-plugin',
+  (prefix, exclude) =>
+    function(css) {
+      css.walkRules(rule => {
+        if (_.isEqual(_.get('parent.name', rule), 'keyframes')) return
 
-const postCssWrapperPlugin= postCss.plugin('postcss-wrapper-plugin', function(prefix) {
-    return function(css) {
-      css.walkRules(function(rule) {
-        let parentName = _.get('parent.name', rule);
-        if (_.includes(parentName, keyFramesParent))
-            return;
-
-        const selector = rule.selector;
-        rule.selector = _.pipe(_.split(','), _.map(_.pipe(_.trim, joinPrefix(prefix))),
-          _.join(', '))(selector);
-      });
-    };
-  });
+        const selector = rule.selector
+        if (!selector.match(exclude))
+          rule.selector = _.pipe(
+            _.split(','),
+            _.map(_.pipe(_.trim, joinPrefix(prefix))),
+            _.join(', ')
+          )(selector)
+      })
+    }
+)
 
 const joinPrefix = function(prefix) {
   return function(selector) {
-    if(selector === 'html') {
-      return selector+prefix;
-    }
-    return _.join(' ', [prefix, selector]);
-  };
-};
+    return _.join(' ', [prefix, selector])
+  }
+}
 
-function PostCssWrapper(file, container) {
-  this.file = file;
-  this.container = container;
+function PostCssWrapper(file, container, exclude) {
+  this.file = file
+  this.container = container
+  this.exclude = exclude
 }
 
 PostCssWrapper.prototype.apply = function(compiler) {
-  const file = this.file;
-  const container = this.container;
+  const file = this.file
+  const container = this.container
+  const exclude = this.exclude
 
-  compiler.plugin('emit', function(compilation, callback) {
-    const assets = compilation.assets;
-    if (!_.has(file, assets)) return callback();
-    const source = assets[file].source();
-    const processor = postCss([postCssWrapperPlugin(container)]);
+  compiler.plugin('emit', (compilation, callback) => {
+    const assets = compilation.assets
+    if (!_.has(file, assets)) return callback()
+    const source = assets[file].source()
+    const processor = postCss([postCssWrapperPlugin(container, exclude)])
 
-    processor.process(source).then(function(result) {
+    processor.process(source).then(result => {
       compilation.assets[file] = {
-        source: function() { return result.css; },
-        size: function() { return result.css.length; }
-  };
-    callback();
-  }, callback);
-  });
-};
+        source() {
+          return result.css
+        },
+        size() {
+          return result.css.length
+        },
+      }
+      callback()
+    }, callback)
+  })
+}
 
-module.exports = PostCssWrapper;
+module.exports = PostCssWrapper
